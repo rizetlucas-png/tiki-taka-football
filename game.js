@@ -15,8 +15,18 @@ const DB = firebase.database();
 // ═══════════════════════════════════════════════════════════
 // WIKIDATA — Recherche joueurs
 // ═══════════════════════════════════════════════════════════
-const WD_API = "https://www.wikidata.org/w/api.php";
+const WD_API    = "https://www.wikidata.org/w/api.php";
+const WD_SPARQL = "https://query.wikidata.org/sparql";
 const _cache = {};
+
+async function sparqlAsk(query) {
+  try {
+    const url = `${WD_SPARQL}?query=${encodeURIComponent(query)}&format=json`;
+    const r = await fetch(url, { headers: { 'Accept': 'application/sparql-results+json' } });
+    const d = await r.json();
+    return d.boolean === true;
+  } catch(e) { return false; }
+}
 
 async function searchFootballers(query) {
   if (query.length < 2) return [];
@@ -60,19 +70,33 @@ async function getEntityClaims(qid) {
 
 async function hasClub(qid, clubQid) {
   const c = await getEntityClaims(qid);
-  return (c.P54||[]).some(x => x.mainsnak?.datavalue?.value?.id === clubQid);
+  const direct = (c.P54||[]).some(x => x.mainsnak?.datavalue?.value?.id === clubQid);
+  if (direct) return true;
+  return await sparqlAsk(`ASK { wd:${qid} wdt:P54 wd:${clubQid} . }`);
 }
 
 async function hasNationality(qid, countryQids) {
   const c   = await getEntityClaims(qid);
   const ids = (c.P27||[]).map(x => x.mainsnak?.datavalue?.value?.id);
-  return countryQids.some(q => ids.includes(q));
+  const direct = countryQids.some(q => ids.includes(q));
+  if (direct) return true;
+  for (const cqid of countryQids) {
+    const ok = await sparqlAsk(`ASK { wd:${qid} wdt:P27 wd:${cqid} . }`);
+    if (ok) return true;
+  }
+  return false;
 }
 
 async function hasLeague(qid, clubQids) {
-  const c    = await getEntityClaims(qid);
-  const pcs  = (c.P54||[]).map(x => x.mainsnak?.datavalue?.value?.id);
-  return clubQids.some(q => pcs.includes(q));
+  const c   = await getEntityClaims(qid);
+  const pcs = (c.P54||[]).map(x => x.mainsnak?.datavalue?.value?.id);
+  const direct = clubQids.some(q => pcs.includes(q));
+  if (direct) return true;
+  for (const cqid of clubQids) {
+    const ok = await sparqlAsk(`ASK { wd:${qid} wdt:P54 wd:${cqid} . }`);
+    if (ok) return true;
+  }
+  return false;
 }
 
 async function hasAward(qid, awardQids) {
@@ -728,6 +752,7 @@ async function confirmPlayer() {
   document.getElementById('wikidata-status').textContent='⏳ Vérification en cours...';
   document.getElementById('wikidata-status').className='wiki-status loading';
   document.getElementById('merr').textContent='';
+  document.getElementById('btn-claim').classList.add('hidden');
 
   try {
     const [mRow,mCol]=await Promise.all([rc.validate(qid), cc.validate(qid)]);
@@ -735,36 +760,49 @@ async function confirmPlayer() {
     if(!mRow||!mCol) {
       document.getElementById('wikidata-status').textContent='';
       document.getElementById('wikidata-status').className='wiki-status';
-      let err='❌ ';
-      if(!mRow&&!mCol) err+=`${name} ne correspond à aucune catégorie`;
-      else if(!mRow) err+=`${name} ne correspond pas à "${rc.label}"`;
-      else err+=`${name} ne correspond pas à "${cc.label}"`;
+      let err='';
+      if(!mRow&&!mCol) err=`❌ ${name} ne correspond à aucune des deux catégories`;
+      else if(!mRow)   err=`❌ ${name} ne correspond pas à "${rc.label}"`;
+      else              err=`❌ ${name} ne correspond pas à "${cc.label}"`;
       document.getElementById('merr').textContent=err;
+      // Si une seule catégorie échoue → possible erreur Wikidata → proposer quand même
+      if(!mRow !== !mCol) {
+        document.getElementById('btn-claim').classList.remove('hidden');
+      }
       return;
     }
 
-    // ✅ Validé !
-    closeModal(); stopTimer(); toast(`✅ ${name} validé !`,'ok');
-    const key=row+'_'+col;
-    const newScore={...G.scores};
-    newScore[String(G.playerNum)]=(parseInt(newScore[String(G.playerNum)])||0)+1;
-    const newCells={...G.cells,[key]:{player:G.playerNum,playerName:name}};
-    const newUsed=[...G.usedPlayers,name];
-    const winner=checkWin(newCells);
-    const upd={
-      cells:newCells, usedPlayers:newUsed, scores:newScore,
-      currentPlayer:G.currentPlayer===1?2:1, lastTurnChange:Date.now()
-    };
-    if(winner!==null){ upd.status='finished'; upd.winner=winner; }
-    else if(Object.keys(newCells).length>=9){ upd.status='finished'; upd.winner=0; }
-    await DB.ref('rooms/'+G.roomCode).update(upd);
+    await submitPlayer(qid, name, row, col);
 
   } catch(e) {
     document.getElementById('wikidata-status').textContent='';
-    document.getElementById('merr').textContent='⚠ Erreur de vérification, réessaie.';
+    document.getElementById('merr').textContent='⚠ Erreur de vérification.';
+    document.getElementById('btn-claim').classList.remove('hidden');
   }
 }
 
+function claimAnyway() {
+  if(!G.selectedCell||!G.selectedPlayerName) return;
+  const {row,col}=G.selectedCell;
+  submitPlayer(G.selectedPlayerQid, G.selectedPlayerName, row, col);
+}
+
+async function submitPlayer(qid, name, row, col) {
+  closeModal(); stopTimer(); toast(`✅ ${name} joué !`,'ok');
+  const key=row+'_'+col;
+  const newScore={...G.scores};
+  newScore[String(G.playerNum)]=(parseInt(newScore[String(G.playerNum)])||0)+1;
+  const newCells={...G.cells,[key]:{player:G.playerNum,playerName:name}};
+  const newUsed=[...G.usedPlayers,name];
+  const winner=checkWin(newCells);
+  const upd={
+    cells:newCells, usedPlayers:newUsed, scores:newScore,
+    currentPlayer:G.currentPlayer===1?2:1, lastTurnChange:Date.now()
+  };
+  if(winner!==null){ upd.status='finished'; upd.winner=winner; }
+  else if(Object.keys(newCells).length>=9){ upd.status='finished'; upd.winner=0; }
+  await DB.ref('rooms/'+G.roomCode).update(upd);
+}
 // ═══════════════════════════════════════════════════════════
 // VICTOIRE
 // ═══════════════════════════════════════════════════════════
