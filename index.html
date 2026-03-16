@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚽ Tiki-Taka Football</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ═══ ACCUEIL ═══ -->
+<div id="s-home" class="screen active">
+  <div class="logo">⚽</div>
+  <h1>Tiki-Taka Football</h1>
+  <p class="subtitle">Le Morpion du foot — Teste tes connaissances !</p>
+  <button class="btn btn-primary" onclick="createRoom()">🎮 Créer une partie</button>
+  <button class="btn btn-secondary" onclick="toggleJoin()">🔗 Rejoindre une partie</button>
+  <div id="join-area" class="hidden">
+    <input id="join-input" class="input" type="text" placeholder="Code ou lien de la partie...">
+    <button class="btn btn-primary" onclick="joinRoom()">Rejoindre !</button>
+  </div>
+</div>
+
+<!-- ═══ LOBBY ═══ -->
+<div id="s-lobby" class="screen">
+  <div class="logo" style="font-size:50px">⏳</div>
+  <h2>Partage ce lien à ton ami !</h2>
+  <div id="lob-code" class="room-code"></div>
+  <div id="lob-link" class="share-box" onclick="copyLink()">🔗 Clique pour copier le lien</div>
+  <div class="card">
+    <h3>⏱ Chrono par tour</h3>
+    <div class="timer-opts">
+      <button class="tbtn active" onclick="setTimer(15,this)">⚡ 15 sec</button>
+      <button class="tbtn" onclick="setTimer(40,this)">⏱ 40 sec</button>
+      <button class="tbtn" onclick="setTimer(60,this)">🕐 60 sec</button>
+      <button class="tbtn" onclick="setTimer(0,this)">♾ Illimité</button>
+    </div>
+  </div>
+  <div class="dots">
+    <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    <span id="lob-status">En attente de l'adversaire...</span>
+  </div>
+  <button id="btn-start" class="btn btn-primary hidden" onclick="startGame()">🚀 Lancer la partie !</button>
+</div>
+
+<!-- ═══ JEU ═══ -->
+<div id="s-game" class="screen">
+  <div class="game-header">
+    <div id="b-p1" class="pbadge p1">
+      <span id="n-p1">Joueur 1</span>
+      <span id="sc-p1" class="score-num" style="color:var(--p1)">0</span>
+    </div>
+    <div class="center-controls">
+      <div id="timer-disp" class="timer-box">–</div>
+      <button id="pass-btn" class="pass-btn hidden" onclick="passMyTurn()">Passer mon tour</button>
+    </div>
+    <div id="b-p2" class="pbadge p2">
+      <span id="sc-p2" class="score-num" style="color:var(--p2)">0</span>
+      <span id="n-p2">Joueur 2</span>
+    </div>
+  </div>
+  <div id="turn-info" class="turn-info"></div>
+  <div id="the-grid" class="grid-wrap"></div>
+  <div id="used-disp" class="used-players"></div>
+</div>
+
+<!-- ═══ RÉSULTAT ═══ -->
+<div id="s-result" class="screen">
+  <div id="r-emoji" style="font-size:5em">🏆</div>
+  <div id="r-title" class="res-title"></div>
+  <div id="r-score" class="res-score"></div>
+  <div id="r-recap"></div>
+  <button class="btn btn-primary" onclick="rematch()">🔄 Revanche</button>
+  <button class="btn btn-secondary" onclick="goHome()">🏠 Accueil</button>
+</div>
+
+<!-- ═══ MODAL SAISIE JOUEUR ═══ -->
+<div id="modal" class="overlay hidden">
+  <div class="modal-box">
+    <h3>🎯 Quel joueur joues-tu ?</h3>
+    <div id="modal-info" class="cell-info"></div>
+    <div class="search-wrap">
+      <input id="psearch" class="input" type="text"
+        placeholder="Tape un nom de joueur..."
+        autocomplete="off"
+        oninput="onSearchInput(this.value)"
+        onkeydown="if(event.key==='Enter')confirmPlayer()">
+      <div id="presults" class="results hidden"></div>
+    </div>
+    <div id="wikidata-status" class="wiki-status"></div>
+    <div class="modal-btns">
+      <button class="btn btn-primary btn-sm" onclick="confirmPlayer()">✅ Valider</button>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal()">Annuler</button>
+    </div>
+    <div id="merr" class="merr"></div>
+  </div>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div id="toast" class="toast"></div>
+
+<!-- ═══ SCRIPTS ═══ -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="game.js"></script>
+
+</body>
+</html>
